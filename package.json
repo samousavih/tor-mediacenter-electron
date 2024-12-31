@@ -1,0 +1,34 @@
+{
+  "name": "tor-mediacenter-electron",
+  "version": "1.0.0",
+  "main": "main.js",
+  "type": "module",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "electron-builder",
+    "start": "electron ."
+  },
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "child_process": "^1.0.2",
+    "dotenv": "^16.4.5",
+    "electron": "^33.2.1",
+    "node-cec": "^0.1.2",
+    "node-cron": "^3.0.3",
+    "puppeteer": "^23.11.1",
+    "tor-request": "^3.1.0",
+    "vlc-command": "^1.2.0",
+    "webtorrent": "^2.5.1"
+  },
+  "build": {
+    "appId": "com.example.electronmovieapp",
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "category": "Utility"
+    }
+  }
+}

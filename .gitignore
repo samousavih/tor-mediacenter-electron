@@ -1,0 +1,5 @@
+node_modules
+torrents
+torrents.json
+movies.json
+.env
