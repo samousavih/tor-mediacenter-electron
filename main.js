@@ -1,5 +1,5 @@
 // Import Electron modules
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow, ipcMain, globalShortcut } from 'electron';
 import fs from 'fs';
 import path from 'path';
 import puppeteer from 'puppeteer';
@@ -7,19 +7,14 @@ import WebTorrent from 'webtorrent';
 import dotenv from 'dotenv';
 import cp from 'child_process';
 import vlcCommand from 'vlc-command';
-//import pkg from 'node-cec';
-import {Remote} from 'hdmi-cec'
-
-
-
-
+import { Remote } from 'hdmi-cec'
 
 
 dotenv.config();
 
 const config = {
     omdb: {
-        apiKey: process.env.OMDB_API_KEY ,
+        apiKey: process.env.OMDB_API_KEY,
     }
 };
 
@@ -39,7 +34,6 @@ const TOR_PROXY_ARGS = [
     "--no-sandbox",
 ];
 
-const PORT = 3000;
 const STREAMING_PORT = 8080;
 const TIMEOUT = 240 * 1000;
 const STREAMING_HOST = "localhost";
@@ -48,28 +42,16 @@ const MAX_RETRIES = 3;
 const RETRY_DELAY = 2000; // 2 seconds
 
 // HDMI-CEC Integration
-//const cec = new NodeCec('Electron App');
 var remote = new Remote();
 
 // When any button is pressed on the remote, we receive the event:
-remote.on('keypress', function(evt) {
+remote.on('keypress', function (evt) {
     handleRemoteInput(evt.key);
-    console.log('user pressed the key "'+ evt.key + '" with code "' + evt.keyCode + '"');
+    console.log('user pressed the key "' + evt.key + '" with code "' + evt.keyCode + '"');
 });
-
-// Alternatively, we only wait for the user to press the "select" key
-remote.on('keypress.select', function() {
-    console.log('user pressed the select key!');
-});
-
-//cec.once('ready', (client) => {
-//    console.log('CEC is ready');
-//    client.send('as'); // Activate Source
-//});
 
 let currentFocusIndex = 0;
-
-
+const GRID_COLUMNS = 5
 
 function handleRemoteInput(key) {
     const movies = Object.values(loadMovieCache());
@@ -78,20 +60,18 @@ function handleRemoteInput(key) {
     switch (key) {
         case 'up':
         case 'up_arrow':
-            currentFocusIndex = (currentFocusIndex - 1 + gridSize) % gridSize;
-            console.log('cec: key up');
+            currentFocusIndex = Math.max(0, currentFocusIndex - GRID_COLUMNS);
             break;
         case 'down':
         case 'down_arrow':
-            currentFocusIndex = (currentFocusIndex + 1) % gridSize;
-            console.log('cec: key down');
+            currentFocusIndex = Math.min(gridSize - 1, currentFocusIndex + GRID_COLUMNS);
             break;
-	case 'left':
+        case 'left':
         case 'left_arrow':
             currentFocusIndex = Math.max(0, currentFocusIndex - 1);
             break;
-	case 'right':
-	case 'right_arrow':
+        case 'right':
+        case 'right_arrow':
             currentFocusIndex = Math.min(gridSize - 1, currentFocusIndex + 1);
             break;
         case 'enter':
@@ -103,7 +83,9 @@ function handleRemoteInput(key) {
             return;
     }
 
+
     focusMovie(currentFocusIndex);
+    ensureMovieInView(currentFocusIndex);
 }
 
 function focusMovie(index) {
@@ -112,6 +94,10 @@ function focusMovie(index) {
 
 function selectMovie(movie) {
     mainWindow.webContents.send('select-movie', movie.torrentLink);
+}
+
+function ensureMovieInView(index) {
+    mainWindow.webContents.send('scroll-to-movie', index);
 }
 
 const cleanMovieName = (torrentName) => {
@@ -127,7 +113,7 @@ const cleanMovieName = (torrentName) => {
     const sizeRegex = /\b(\d{3,4}MB|\d+\.\d+GB|\d+GB)\b/; // Match sizes
     const unwantedEndRegex = /[-_.]+$/; // Match unwanted trailing symbols
     const keywordsRegex = /\b(sex comedy|Wi|pseudo|mixed|ETRG|SHITBOX|8BaLLRiPS|Best Pictures|GAF Poke|Compilation)\b/gi;
-    const sessionInfoRegex =  /\b(Season\s?\d+|S\d{2}|EP\d+|E\d+|S\d+E\d+|Collection|Mega\s?Pack|Movie|Pack)\b/gi;
+    const sessionInfoRegex = /\b(Season\s?\d+|S\d{2}|EP\d+|E\d+|S\d+E\d+|Collection|Mega\s?Pack|Movie|Pack)\b/gi;
 
     // Specific case handling for packs and collections
     const packRegex = /\b(\d+\s?to\s?\d+|S\d{2}\s?to\s?S\d{2}|\d+\s?Movies|Box\s?Set|Mega\s?Pack)\b/gi;
@@ -180,7 +166,7 @@ const extractSeasonEpisode = (name) => {
 const scrapeTorrents = async () => {
     console.log("Checking torrent cache...")
     const torrentCache = loadTorrentCache();
-    if (torrentCache.length > 0){
+    if (torrentCache.length > 0) {
         console.log("Using torrent cache...")
         return torrentCache;
     }
@@ -188,7 +174,7 @@ const scrapeTorrents = async () => {
     const browser = await puppeteer.launch({
         headless: true,
         args: TOR_PROXY_ARGS,
-	executablePath:'/usr/bin/chromium-browser'
+        executablePath: '/usr/bin/chromium-browser'
     });
 
     const page = await browser.newPage();
@@ -300,10 +286,10 @@ const processTorrents = async (torrents) => {
         //console.log(`Fetching movie info for: ${searchWord}`);
         const movieInfo = await fetchMovieInfo(searchWord, year);
         if (movieInfo) {
-            movieCache[searchWord] = { ...movieInfo, torrentLink: link, season, episode, displayName:name };
+            movieCache[searchWord] = { ...movieInfo, torrentLink: link, season, episode, displayName: name };
             //console.log(`Fetched and cached: ${searchWord}`);
-        }else{
-            movieCache[searchWord] = {Title: name, torrentLink: link, season, episode };
+        } else {
+            movieCache[searchWord] = { Title: name, torrentLink: link, season, episode };
         }
     }
 
@@ -319,8 +305,8 @@ const generateMovieHTML = (movies) => {
         <title>Top Movies</title>
         <style>
             .grid {
-                display: flex;
-                flex-wrap: wrap;
+                display: grid;
+                grid-template-columns: repeat(${GRID_COLUMNS}, 1fr);
                 gap: 16px;
                 justify-content: center;
             }
@@ -329,7 +315,6 @@ const generateMovieHTML = (movies) => {
                 border-radius: 8px;
                 padding: 8px;
                 text-align: center;
-                width: 200px;
                 cursor: pointer;
             }
             .movie img {
@@ -351,19 +336,26 @@ const generateMovieHTML = (movies) => {
                 box-shadow: 0 0 10px rgba(0, 123, 255, 0.5);
             }
         </style>
-        <script>
-            const { ipcRenderer } = require('electron');
-
-            ipcRenderer.on('focus-movie', (event, index) => {
+         <script>
+            window.electronAPI.onFocusMovie((index) => {
                 const movies = document.querySelectorAll('.movie');
                 movies.forEach((movie, i) => {
                     movie.classList.toggle('focused', i === index);
                 });
             });
 
-            ipcRenderer.on('select-movie', (event, torrentLink) => {
-                window.electronAPI.startTorrent(torrentLink);
+            window.electronAPI.scrollToMovie((index) => {
+                const movie = document.querySelectorAll('.movie')[index];
+                if (movie) {
+                    movie.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
             });
+
+            window.electronAPI.onSelectMovie((torrentLink) => {
+               window.electronAPI.startTorrent(torrentLink);
+            });
+
+            
         </script>
     </head>
     <body>
@@ -384,6 +376,14 @@ const generateMovieHTML = (movies) => {
 
 // Electron app setup
 app.on('ready', async () => {
+    // Add keyboard support
+    globalShortcut.register('Up', () => handleRemoteInput('up_arrow'));
+    globalShortcut.register('Down', () => handleRemoteInput('down_arrow'));
+    globalShortcut.register('Left', () => handleRemoteInput('left_arrow'));
+    globalShortcut.register('Right', () => handleRemoteInput('right_arrow'));
+    globalShortcut.register('Enter', () => handleRemoteInput('enter'));
+
+
     let torrentClient = new WebTorrent();
 
     mainWindow = new BrowserWindow({
@@ -397,7 +397,7 @@ app.on('ready', async () => {
         },
     });
 
-    
+
     const torrents = await scrapeTorrents();
     if (torrents.length > 0) {
         await processTorrents(torrents);
@@ -422,15 +422,15 @@ app.on('ready', async () => {
 
         torrentClient = new WebTorrent();
         const instance = torrentClient.createServer()
-        instance.server.listen(STREAMING_PORT); 
+        instance.server.listen(STREAMING_PORT);
 
         console.log(`Adding torrent: ${torrentLink}`);
         torrentClient.add(torrentLink, { path: './torrents', destroyStoreOnDestroy: true }, torrent => {
             console.log(`Downloading torrent: ${torrent.name}`);
 
             const streamingUrls = torrent.files
-            .filter(file => file.name.endsWith('.mp4') || file.name.endsWith('.mkv'))
-            .map(file => new URL(`http://${STREAMING_HOST}:${STREAMING_PORT}${file.streamURL}`).toString())
+                .filter(file => file.name.endsWith('.mp4') || file.name.endsWith('.mkv'))
+                .map(file => new URL(`http://${STREAMING_HOST}:${STREAMING_PORT}${file.streamURL}`).toString())
 
             console.log(`Streaming urls: ${streamingUrls}`);
 
@@ -446,26 +446,26 @@ app.on('ready', async () => {
         });
     });
 
-    
+
 });
 
-const playVideo =  (streamingUrls) => {
+const playVideo = (streamingUrls) => {
     console.log(`Starting video urls: ${streamingUrls}`);
 
     vlcCommand((err, cmd) => {
         if (err) {
-          console.error('Comando VLC non trovato ' + err);
-          return;
+            console.error('Comando VLC non trovato ' + err);
+            return;
         }
         const args = ["-f"]
         cp.execFile(cmd, args.concat(streamingUrls), (err, stdout) => {
-          if (err) {
-            console.error(err);
-            return;
-          }
-          console.log(stdout);
+            if (err) {
+                console.error(err);
+                return;
+            }
+            console.log(stdout);
         });
-      });
+    });
 }
 
 
