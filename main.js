@@ -7,8 +7,11 @@ import WebTorrent from 'webtorrent';
 import dotenv from 'dotenv';
 import cp from 'child_process';
 import vlcCommand from 'vlc-command';
-import pkg from 'node-cec';
-const { NodeCec } = pkg;
+//import pkg from 'node-cec';
+import {Remote} from 'hdmi-cec'
+
+
+
 
 
 
@@ -45,21 +48,28 @@ const MAX_RETRIES = 3;
 const RETRY_DELAY = 2000; // 2 seconds
 
 // HDMI-CEC Integration
-const cec = new NodeCec('Electron App');
-cec.once('ready', (client) => {
-    console.log('CEC is ready');
-    client.send('as'); // Activate Source
+//const cec = new NodeCec('Electron App');
+var remote = new Remote();
+
+// When any button is pressed on the remote, we receive the event:
+remote.on('keypress', function(evt) {
+    handleRemoteInput(evt.key);
+    console.log('user pressed the key "'+ evt.key + '" with code "' + evt.keyCode + '"');
 });
+
+// Alternatively, we only wait for the user to press the "select" key
+remote.on('keypress.select', function() {
+    console.log('user pressed the select key!');
+});
+
+//cec.once('ready', (client) => {
+//    console.log('CEC is ready');
+//    client.send('as'); // Activate Source
+//});
 
 let currentFocusIndex = 0;
 
-// Handle remote input
-cec.on('key', (data) => {
-    console.log(`Key pressed: ${data.name}`);
-    handleRemoteInput(data.name);
-});
 
-cec.start();
 
 function handleRemoteInput(key) {
     const movies = Object.values(loadMovieCache());
@@ -69,10 +79,20 @@ function handleRemoteInput(key) {
         case 'up':
         case 'up_arrow':
             currentFocusIndex = (currentFocusIndex - 1 + gridSize) % gridSize;
+            console.log('cec: key up');
             break;
         case 'down':
         case 'down_arrow':
             currentFocusIndex = (currentFocusIndex + 1) % gridSize;
+            console.log('cec: key down');
+            break;
+	case 'left':
+        case 'left_arrow':
+            currentFocusIndex = Math.max(0, currentFocusIndex - 1);
+            break;
+	case 'right':
+	case 'right_arrow':
+            currentFocusIndex = Math.min(gridSize - 1, currentFocusIndex + 1);
             break;
         case 'enter':
         case 'select':
@@ -168,6 +188,7 @@ const scrapeTorrents = async () => {
     const browser = await puppeteer.launch({
         headless: true,
         args: TOR_PROXY_ARGS,
+	executablePath:'/usr/bin/chromium-browser'
     });
 
     const page = await browser.newPage();
@@ -252,7 +273,7 @@ const fetchMovieInfo = async (movieName, year) => {
         if (data.Response === "True") {
             return data; // Return movie details if found
         } else {
-            console.warn(`OMDb API: No result for "${movieName}" (${year})`);
+            //console.warn(`OMDb API: No result for "${movieName}" (${year})`);
             return null;
         }
     } catch (error) {
@@ -272,15 +293,15 @@ const processTorrents = async (torrents) => {
 
         // Skip if movie already exists in the cache
         if (movieCache[searchWord]) {
-            console.log(`Using cached data for: ${searchWord}`);
+            //console.log(`Using cached data for: ${searchWord}`);
             continue;
         }
 
-        console.log(`Fetching movie info for: ${searchWord}`);
+        //console.log(`Fetching movie info for: ${searchWord}`);
         const movieInfo = await fetchMovieInfo(searchWord, year);
         if (movieInfo) {
             movieCache[searchWord] = { ...movieInfo, torrentLink: link, season, episode, displayName:name };
-            console.log(`Fetched and cached: ${searchWord}`);
+            //console.log(`Fetched and cached: ${searchWord}`);
         }else{
             movieCache[searchWord] = {Title: name, torrentLink: link, season, episode };
         }
